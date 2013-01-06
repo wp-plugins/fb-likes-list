@@ -3,7 +3,7 @@
 Plugin Name: Facebook Likes List
 Plugin URI: http://andrewnorcross.com/plugins/fb-likes-list/
 Description: Retrieves and stored Facebook like counts and lists popular
-Version: 1.0.1
+Version: 1.0.2
 Author: Andrew Norcross
 Author URI: http://andrewnorcross.com
 
@@ -100,10 +100,12 @@ class fb_like_list_widget extends WP_Widget {
 		$title = empty($instance['title']) ? '' : apply_filters('widget_title', $instance['title']);
 		if ( !empty( $title ) ) { echo $before_title . $title . $after_title; };
 
+			$count = !empty( $instance['count'] ) ? ! $instance['count'] : 5;
+
 			$args = array(
 				'fields'			=> 'ids',
 				'post_type'			=> 'post',
-				'posts_per_page'	=> 5,
+				'posts_per_page'	=> $count,
 				'order'				=> 'DESC',
 				'meta_key'			=> '_fb_like',
 				'orderby'			=> 'meta_value_num',
@@ -121,13 +123,23 @@ class fb_like_list_widget extends WP_Widget {
 			$fbposts = get_posts($args);
 
 			if ($fbposts) :
+
+			$show_total = isset( $instance['number'] ) ? $instance['number'] : false;
+
 			echo '<ul>';
 			foreach ($fbposts as $fbpost) :
 			// begin single items
 				$link		= get_permalink($fbpost);
 				$title		= get_the_title($fbpost);
+				$total		= get_post_meta($fbpost, '_fb_like', true );
 
-			echo '<li><a href="'.$link.'">'.$title.'</a></li>';
+			echo '<li>';
+			echo '<a href="'.$link.'">';
+			echo ''.$title.'';
+			if ( $show_total )
+				echo ' ('.$total.')';
+			echo '</a>';
+			echo '</li>';
 			// end each item
 			endforeach;
 			echo '</ul>';
@@ -139,24 +151,33 @@ class fb_like_list_widget extends WP_Widget {
         <?php }
 
     /** @see WP_Widget::update */
-    function update($new_instance, $old_instance) {
-	$instance = $old_instance;
-	$instance['title']	= strip_tags($new_instance['title']);
-	$instance['count']	= $new_instance['count'];
-        return $instance;
-    }
+	function update( $new_instance, $old_instance ) {
+		$instance = $old_instance;
+		$instance['title']	= strip_tags($new_instance['title']);
+		$instance['count']	= (int) $new_instance['count'];
+		$instance['number']	= (bool) $new_instance['number'];
+
+		return $instance;
+	}
 
     /** @see WP_Widget::form */
     function form($instance) {
-        $instance = wp_parse_args( (array) $instance, array(
-			'title'	=> 'Popular Posts',
-			'count'	=> '5',
-			));
-		$title	= strip_tags($instance['title']);
-		$count	= strip_tags($instance['count']);
+		$title	= isset( $instance['title'] )	? esc_attr( $instance['title'] ) : 'Popular Posts';
+		$count	= isset( $instance['count'] )	? absint( $instance['count'] ) : 5;
+		$number	= isset( $instance['number'] )	? (bool) $instance['number'] : false;
         ?>
-		<p><label for="<?php echo $this->get_field_id('title'); ?>"><?php _e('Widget Title:'); ?><input class="widefat" id="<?php echo $this->get_field_id('title'); ?>" name="<?php echo $this->get_field_name('title'); ?>" type="text" value="<?php echo esc_attr($title); ?>" /></label></p>
-		<p><label for="<?php echo $this->get_field_id('count'); ?>"><?php _e('Post Count:'); ?><input class="widefat" id="<?php echo $this->get_field_id('count'); ?>" name="<?php echo $this->get_field_name('count'); ?>" type="text" value="<?php echo esc_attr($count); ?>" /></label></p>
+		<p>
+			<label for="<?php echo $this->get_field_id('title'); ?>"><?php _e('Widget Title:'); ?>
+			<input class="widefat" id="<?php echo $this->get_field_id('title'); ?>" name="<?php echo $this->get_field_name('title'); ?>" type="text" value="<?php echo esc_attr($title); ?>" /></label>
+		</p>
+		<p>
+			<label for="<?php echo $this->get_field_id('count'); ?>"><?php _e('Post Count:'); ?>
+			<input class="widefat" id="<?php echo $this->get_field_id('count'); ?>" name="<?php echo $this->get_field_name('count'); ?>" type="text" value="<?php echo esc_attr($count); ?>" /></label>
+		</p>
+		<p>
+			<input class="checkbox" type="checkbox" <?php checked( $number ); ?> id="<?php echo $this->get_field_id( 'number' ); ?>" name="<?php echo $this->get_field_name( 'number' ); ?>" />
+			<label for="<?php echo $this->get_field_id( 'number' ); ?>"><?php _e( 'Display like count?' ); ?></label>
+		</p>
 		<?php }
 
 } // class

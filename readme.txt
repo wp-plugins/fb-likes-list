@@ -5,7 +5,7 @@ Donate link: https://andrewnorcross.com/donate
 Tags: facebook, facebook like, popular posts, facebook widget
 Requires at least: 3.4
 Tested up to: 3.5
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,9 @@ The post doesn't get a count until it's been loaded on the front-end of the site
 
 
 == Changelog ==
+
+= 1.0.2 =
+* Added option for displaying like count
 
 = 1.0.1 =
 * Fixed widget query logic
