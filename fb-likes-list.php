@@ -3,7 +3,7 @@
 Plugin Name: Facebook Likes List
 Plugin URI: http://andrewnorcross.com/plugins/fb-likes-list/
 Description: Retrieves and stored Facebook like counts and lists popular
-Version: 1.0.2
+Version: 1.0.3
 Author: Andrew Norcross
 Author URI: http://andrewnorcross.com
 
@@ -105,7 +105,7 @@ class fb_like_list_widget extends WP_Widget {
 			$args = array(
 				'fields'			=> 'ids',
 				'post_type'			=> 'post',
-				'posts_per_page'	=> $count,
+				'numberposts'		=> $count,
 				'order'				=> 'DESC',
 				'meta_key'			=> '_fb_like',
 				'orderby'			=> 'meta_value_num',
