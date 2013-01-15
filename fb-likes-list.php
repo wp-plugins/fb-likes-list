@@ -3,7 +3,7 @@
 Plugin Name: Facebook Likes List
 Plugin URI: http://andrewnorcross.com/plugins/fb-likes-list/
 Description: Retrieves and stored Facebook like counts and lists popular
-Version: 1.0.3
+Version: 1.0.4
 Author: Andrew Norcross
 Author URI: http://andrewnorcross.com
 
@@ -100,16 +100,14 @@ class fb_like_list_widget extends WP_Widget {
 		$title = empty($instance['title']) ? '' : apply_filters('widget_title', $instance['title']);
 		if ( !empty( $title ) ) { echo $before_title . $title . $after_title; };
 
-			$count = !empty( $instance['count'] ) ? ! $instance['count'] : 5;
+			$count = !empty( $instance['count'] ) ? absint( $instance['count'] ) : 5;
 
-			$args = array(
-				'fields'			=> 'ids',
+			$fbposts = new WP_Query( array (
 				'post_type'			=> 'post',
-				'numberposts'		=> $count,
+				'posts_per_page'	=> $count,
 				'order'				=> 'DESC',
-				'meta_key'			=> '_fb_like',
 				'orderby'			=> 'meta_value_num',
-				'no_found_rows'		=> true,
+				'meta_key'			=> '_fb_like',
 				'post_status'		=> 'publish',
 				'meta_query'		=> array(
 					array(
@@ -118,30 +116,30 @@ class fb_like_list_widget extends WP_Widget {
 						'type'		=> 'numeric',
 						'compare'	=> '>'
 					)
-				)
-			);
-			$fbposts = get_posts($args);
+				),
+				'no_found_rows'		=> true,
+			));
 
-			if ($fbposts) :
-
+			if ($fbposts->have_posts()) :
 			$show_total = isset( $instance['number'] ) ? $instance['number'] : false;
-
 			echo '<ul>';
-			foreach ($fbposts as $fbpost) :
-			// begin single items
-				$link		= get_permalink($fbpost);
-				$title		= get_the_title($fbpost);
-				$total		= get_post_meta($fbpost, '_fb_like', true );
+			while ($fbposts->have_posts()) : $fbposts->the_post();
+				// begin single items
+				global $post;
+				$link		= get_permalink($post->ID);
+				$title		= get_the_title($post->ID);
+				$total		= get_post_meta($post->ID, '_fb_like', true );
 
-			echo '<li>';
-			echo '<a href="'.$link.'">';
-			echo ''.$title.'';
-			if ( $show_total )
-				echo ' ('.$total.')';
-			echo '</a>';
-			echo '</li>';
+				echo '<li>';
+				echo '<a href="'.$link.'">';
+				echo ''.$title.'';
+				if ( $show_total )
+					echo ' ('.$total.')';
+				echo '</a>';
+				echo '</li>';
 			// end each item
-			endforeach;
+			endwhile;
+			wp_reset_postdata();
 			echo '</ul>';
 			endif;
 
