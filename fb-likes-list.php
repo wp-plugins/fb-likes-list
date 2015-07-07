@@ -3,7 +3,7 @@
 Plugin Name: Facebook Likes List
 Plugin URI: http://andrewnorcross.com/plugins/fb-likes-list/
 Description: Retrieves and stored Facebook like counts and lists popular
-Version: 1.0.4
+Version: 1.0.5
 Author: Andrew Norcross
 Author URI: http://andrewnorcross.com
 
@@ -33,7 +33,8 @@ class FB_Likes_List
 	 * @return FB_Likes_List
 	 */
 	public function __construct() {
-		add_action		( 'wp', 		array( $this, 'grab_count'		) 			);
+		add_action( 'wp',                               array( $this, 'grab_count'      )           );
+		add_action( 'widgets_init',                     array( $this, 'register_widget' )           );
 	}
 
 	/**
@@ -41,39 +42,59 @@ class FB_Likes_List
 	 *
 	 * @return FB_Likes_List
 	 */
-
 	public function grab_count() {
 
-		// do not load on admin
-		if ( is_admin() )
+		// do not load on admin or not on singular
+		if ( is_admin() || ! is_singular( 'post' ) ) {
 			return;
+		}
 
-		// check type and bail on non-single posts
-		if ( !is_singular( 'post' ) )
-			return;
-
-		// ok. we're on a single post. now get moving
-        $args = array(
-            'sslverify' => false
-            );
-
+		// fetch the global post object
 		global $post;
 
-		$fb_check	= get_permalink( $post->ID );
-		$fb_call	= 'https://graph.facebook.com/fql?q=SELECT%20like_count%20FROM%20link_stat%20WHERE%20url=%27'.urlencode($fb_check).'%27';
+		// bail without the object
+		if ( empty( $post ) || ! is_object( $post ) ) {
+			return;
+		}
 
-		$response	= wp_remote_get( $fb_call, $args );
+		// get the link
+		$link   = get_permalink( $post->ID );
+
+		// make the call
+		$call   = 'https://graph.facebook.com/fql?q=SELECT%20like_count%20FROM%20link_stat%20WHERE%20url=%27' . urlencode( $link ) . '%27';
+
+		// do the call
+		$rmget  = wp_remote_get( $call, array( 'sslverify' => false ) );
 
 		// error. bail.
-		if( is_wp_error( $response ) )
-			return;
+		if( is_wp_error( $rmget ) ) {
+			return false;
+		}
 
 		// parse return values
-		$fb_return	= json_decode($response['body']);
-		$fb_like	= $fb_return->data[0]->like_count;
+		$return = json_decode( $rmget['body'] );
 
-		update_post_meta( $post->ID, '_fb_like', $fb_like );
+		// bail with no decoded
+		if ( empty( $return ) || empty( $fb_return->data ) || empty( $fb_return->data[0] ) || empty( $fb_return->data[0]->like_count ) ) {
+			return false;
+		}
 
+		// get the count
+		$count  = $fb_return->data[0]->like_count;
+
+		// update the count
+		update_post_meta( $post->ID, '_fb_like', $count );
+	}
+
+	/**
+	 * register our custom widgets
+	 *
+	 * @return void
+	 *
+	 * @since 1.0
+	 */
+	public function register_widget() {
+		register_widget( 'FB_Like_List_Widget' );
 	}
 
 /// end class
@@ -88,96 +109,124 @@ $FB_Likes_List = new FB_Likes_List();
  * @return FB_Likes_List
 */
 
-class fb_like_list_widget extends WP_Widget {
-	function fb_like_list_widget() {
-		$widget_ops = array( 'classname' => 'fb_like_list', 'description' => 'Displays posts based on FB like count' );
-		$this->WP_Widget( 'fb_like_list', 'FB Like List', $widget_ops );
+class FB_Like_List_Widget extends WP_Widget {
+
+	/**
+	 * [__construct description]
+	 */
+	function __construct() {
+		$widget_ops = array( 'classname' => 'fb_like_list', 'description' => __( 'Displays posts based on FB like count' ) );
+		parent::__construct( 'fb_like_list', __( 'FB Like List' ), $widget_ops );
+		$this->alt_option_name = 'fb_like_list';
 	}
 
+	/**
+	 * [widget description]
+	 * @param  [type] $args     [description]
+	 * @param  [type] $instance [description]
+	 * @return [type]           [description]
+	 */
 	function widget( $args, $instance ) {
-		extract( $args, EXTR_SKIP );
-		echo $before_widget;
-		$title = empty($instance['title']) ? '' : apply_filters('widget_title', $instance['title']);
-		if ( !empty( $title ) ) { echo $before_title . $title . $after_title; };
 
-			$count = !empty( $instance['count'] ) ? absint( $instance['count'] ) : 5;
+		// get our count
+		$count  = ! empty( $instance['count'] ) ? absint( $instance['count'] ) : 5;
 
-			$fbposts = new WP_Query( array (
-				'post_type'			=> 'post',
-				'posts_per_page'	=> $count,
-				'order'				=> 'DESC',
-				'orderby'			=> 'meta_value_num',
-				'meta_key'			=> '_fb_like',
-				'post_status'		=> 'publish',
-				'meta_query'		=> array(
-					array(
-						'key'		=> '_fb_like',
-						'value'		=> 0,
-						'type'		=> 'numeric',
-						'compare'	=> '>'
-					)
-				),
-				'no_found_rows'		=> true,
-			));
+		// set the item args
+		$args   = array(
+			'post_type'         => 'post',
+			'posts_per_page'    => absint( $count ),
+			'order'             => 'DESC',
+			'orderby'           => 'meta_value_num',
+			'meta_key'          => '_fb_like',
+			'post_status'       => 'publish',
+			'meta_query'        => array(
+				array(
+					'key'       => '_fb_like',
+					'value'     => 0,
+					'type'      => 'numeric',
+					'compare'   => '>'
+				)
+			),
+		);
 
-			if ($fbposts->have_posts()) :
-			$show_total = isset( $instance['number'] ) ? $instance['number'] : false;
-			echo '<ul>';
-			while ($fbposts->have_posts()) : $fbposts->the_post();
-				// begin single items
-				global $post;
-				$link		= get_permalink($post->ID);
-				$title		= get_the_title($post->ID);
-				$total		= get_post_meta($post->ID, '_fb_like', true );
+		// get the items
+		$items  = get_posts( $args );
 
-				echo '<li>';
-				echo '<a href="'.$link.'">';
-				echo ''.$title.'';
-				if ( $show_total )
-					echo ' ('.$total.')';
-				echo '</a>';
-				echo '</li>';
-			// end each item
-			endwhile;
-			wp_reset_postdata();
-			echo '</ul>';
-			endif;
+		// bail without items
+		if ( empty( $items ) ) {
+			return;
+		}
 
-		echo $after_widget;
-		?>
+		// check for showing the total
+		$showt  = isset( $instance['number'] ) ? $instance['number'] : false;
 
-        <?php }
+		// now do it
+		echo $args['before_widget'];
 
-    /** @see WP_Widget::update */
+		// set the title
+		$title  = empty( $instance['title'] ) ? '' : apply_filters( 'widget_title', $instance['title'] );
+
+		// output the title
+		if ( ! empty( $title ) ) { echo $args['before_title'] . $title . $args['after_title']; };
+
+		// output the list
+		echo '<ul>';
+
+		// loop the items
+		foreach ( $items as $item ) {
+
+			// get the items for each link
+			$link   = get_permalink( $item->ID );
+			$title  = get_the_title( $item->ID );
+			$total  = get_post_meta( $item->ID, '_fb_like', true );
+
+			// the
+			$viewt  = ! empty( $showt ) ? ' (' . absint( $total ) . ')' : '';
+
+			// the link
+			echo '<li><a href="' . esc_url( $link ) . '">' . esc_attr( $title ) . $viewt . '</a></li>';
+		}
+
+		// close the list
+		echo '</ul>';
+
+		// close the widget
+		echo $args['after_widget'];
+	}
+
+	/** @see WP_Widget::update */
 	function update( $new_instance, $old_instance ) {
 		$instance = $old_instance;
-		$instance['title']	= strip_tags($new_instance['title']);
-		$instance['count']	= (int) $new_instance['count'];
-		$instance['number']	= (bool) $new_instance['number'];
 
+		// set and sanitize the variables
+		$instance['title']  = sanitize_text_field( $new_instance['title'] );
+		$instance['count']  = absint( $new_instance['count'] );
+		$instance['number'] = ! empty( $new_instance['number'] ) ? true : false;
+
+		// return the instance
 		return $instance;
 	}
 
-    /** @see WP_Widget::form */
-    function form($instance) {
-		$title	= isset( $instance['title'] )	? esc_attr( $instance['title'] ) : 'Popular Posts';
-		$count	= isset( $instance['count'] )	? absint( $instance['count'] ) : 5;
-		$number	= isset( $instance['number'] )	? (bool) $instance['number'] : false;
-        ?>
+	/** @see WP_Widget::form */
+	function form( $instance ) {
+
+		// set the items
+		$title  = ! empty( $instance['title'] ) ? esc_attr( $instance['title'] ) : 'Popular Posts';
+		$count  = ! empty( $instance['count'] ) ? absint( $instance['count'] ) : 5;
+		$number = ! empty( $instance['number'] ) ? true : false;
+		?>
 		<p>
-			<label for="<?php echo $this->get_field_id('title'); ?>"><?php _e('Widget Title:'); ?>
-			<input class="widefat" id="<?php echo $this->get_field_id('title'); ?>" name="<?php echo $this->get_field_name('title'); ?>" type="text" value="<?php echo esc_attr($title); ?>" /></label>
+			<label for="<?php echo $this->get_field_id( 'title' ); ?>"><?php _e( 'Widget Title:' ); ?>
+			<input class="widefat" id="<?php echo $this->get_field_id( 'title' ); ?>" name="<?php echo $this->get_field_name( 'title' ); ?>" type="text" value="<?php echo $title; ?>" /></label>
 		</p>
 		<p>
-			<label for="<?php echo $this->get_field_id('count'); ?>"><?php _e('Post Count:'); ?>
-			<input class="widefat" id="<?php echo $this->get_field_id('count'); ?>" name="<?php echo $this->get_field_name('count'); ?>" type="text" value="<?php echo esc_attr($count); ?>" /></label>
+			<label for="<?php echo $this->get_field_id( 'count' ); ?>"><?php _e( 'Post Count:' ); ?>
+			<input class="widefat" id="<?php echo $this->get_field_id( 'count' ); ?>" name="<?php echo $this->get_field_name( 'count' ); ?>" type="text" value="<?php echo $count; ?>" /></label>
 		</p>
 		<p>
 			<input class="checkbox" type="checkbox" <?php checked( $number ); ?> id="<?php echo $this->get_field_id( 'number' ); ?>" name="<?php echo $this->get_field_name( 'number' ); ?>" />
 			<label for="<?php echo $this->get_field_id( 'number' ); ?>"><?php _e( 'Display like count?' ); ?></label>
 		</p>
-		<?php }
+	<?php }
 
 } // class
-
-add_action( 'widgets_init', create_function( '', "register_widget('fb_like_list_widget');" ) );
